@@ -109,15 +109,19 @@ def answer(borough, num):
 
     complete = borough+ str(num)
 
-    groups = re.search(r'([A-z]).*\.{0,1}.*?([0-9]+)$', complete)
+    groups = re.search(r'([A-z])\.{0,1}([0-9]+)$', complete.replace(' ',''))
     session.attributes['bus_route'] = groups.group(1) + ' ' + groups.group(2)
+    print(session.attributes['bus_route'])
+
+    if session.attributes['bus_route'].upper() == 'M 60':
+        session.attributes['bus_route'] = 'M60-SBS'
 
     msg = "<speak>Your bus is {} {}. ".format(borough, num)
 
     stops = find_stops()
 
     if len(stops) == 0:
-        return question('There are no nearby stops for {}. Would you like to try another route?'.format(complete))
+        return question('There are no nearby stops for {}. Would you like to try another route?'.format(session.attributes['bus_route']))
 
     session.attributes['nearbyStops'] = json.dumps(stops, default=obj_dict)
 
@@ -211,6 +215,7 @@ def get_eta_message(bus_route, stop_id, bus_stop):
 
     # fix bus formatting
     bus_route = bus_route.upper().replace(' ', '')
+    bus_route = bus_route.upper().replace('-SBS', '+')
 
     # MTA buses are either MTA NYCT_Q50 or MTABC_Q50
     # Let's try them both
@@ -262,11 +267,11 @@ def get_eta_message(bus_route, stop_id, bus_stop):
         current_time = time.mktime(datetime.datetime.now().timetuple())
 
         eta = math.floor((arrival_time - current_time) / 60 * 100) / 100
-        final_message += "The {} will arrive in {} minutes. ".format(bus_route, eta)
+        final_message += "The {} will arrive in {} minutes. ".format(bus_route.replace('+', 'SBS'), eta)
 
         final_message += "It is {} from {}.".format(distance, bus_stop)
     else:
-        final_message += "The {} is {} from {}".format(bus_route, distance, bus_stop)
+        final_message += "The {} is {} from {}".format(bus_route.replace('+', 'SBS'), distance, bus_stop)
 
     return final_message
 
