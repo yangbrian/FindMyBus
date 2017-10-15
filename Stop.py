@@ -2,11 +2,12 @@ import re
 import json
 
 class Stop:
-    def __init__(self,name,code, buses):
+    def __init__(self,name,code, buses, direction):
         self.name = name
         self.audioName = self.convertAudioName(name)
         self.code = code
         self.buses = buses
+        self.audioName += " " + self.convertAudioDirection(direction)
     def __repr__(self):
         return json.dumps(self.__dict__)
 
@@ -37,3 +38,18 @@ class Stop:
         for k in no_space:
             name = name.replace('/', ' AND ')
         return name
+    
+    def convertAudioDirection(self, direction):
+        expansions = {
+            'N' : 'North',
+            'S' : 'South',
+            'W' : 'West',
+            'E' : 'East'
+        }
+
+        output = ''
+
+        for char in direction:
+            output += expansions[char]
+
+        return output + ' bound'

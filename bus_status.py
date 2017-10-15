@@ -109,12 +109,15 @@ def answer(borough, num):
 
     complete = borough+ str(num)
 
-    groups = re.search(r'([A-z]).*\..*?([0-9]+)$', complete)
+    groups = re.search(r'([A-z]).*\.{0,1}.*?([0-9]+)$', complete)
     session.attributes['bus_route'] = groups.group(1) + ' ' + groups.group(2)
 
     msg = "<speak>Your bus is {} {}. ".format(borough, num)
 
     stops = find_stops()
+
+    if len(stops) == 0:
+        return question('There are no nearby stops for {}. Would you like to try another route?'.format(complete))
 
     session.attributes['nearbyStops'] = json.dumps(stops, default=obj_dict)
 
@@ -130,7 +133,6 @@ def mapStops(stops):
     for idx,stop in enumerate(stops):
         nearby_stops[idx+1] = stop
     return nearby_stops
-
         
 def filterStops(stops):
     filteredStops = []
@@ -187,12 +189,13 @@ def get_list_of_stops(stops):
     stop_list = []
     for stop in stops['data']['stops']:
         name = stop['name']
+        direction = stop['direction']
         code = stop['code']
         buses = []
         for routes in stop['routes']:
             buses.append(routes['shortName'])
             print(routes['shortName'])
-        stop = Stop(name,code,buses)
+        stop = Stop(name,code,buses,direction)
         stop_list.append(stop)
     return filterStops(stop_list)[:5]
 
