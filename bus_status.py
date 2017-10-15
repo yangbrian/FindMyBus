@@ -6,8 +6,14 @@ from flask_dynamo import Dynamo
 from flask_ask import Ask, statement, question, session, context
 from geopy.geocoders import Nominatim
 from Stop import Stop
+import iso8601
+import datetime
+import time
 
+import math
 import requests
+
+MTA_API_KEY = "a7274011-3c23-4fd2-9641-dcbe0d873f47"
 
 app = Flask(__name__)
 ask = Ask(app, "/")
@@ -64,7 +70,11 @@ def answer(borough, num):
 
     msg = "Your bus is {} {}. ".format(borough, num)
 
-    # msg = "Your bus is {} {}".format(borough, num)
+    # HARDCODED TEST
+    #stop_id = 551744
+    #return statement(get_eta_message('Q65', stop_id))
+
+    msg = "Your bus is {} {}. ".format(borough, num)
     msg += display_stops(find_stops())
     print(msg)
     return statement(msg)
@@ -95,10 +105,9 @@ def find_stops():
 
 def get_nearby_stops(latitude, longitude):
 
-    api_KEY = "a7274011-3c23-4fd2-9641-dcbe0d873f47"
     lat = str(latitude)
     lon = str(longitude)
-    URL = "http://bustime.mta.info/api/where/stops-for-location.json?key="+api_KEY+"&lat="+lat+"&lon="+lon+"&radius=321.869"
+    URL = "http://bustime.mta.info/api/where/stops-for-location.json?key="+MTA_API_KEY+"&lat="+lat+"&lon="+lon+"&radius=321.869"
     r = requests.get(URL)
     if r.status_code == 200:
         return get_list_of_stops(r.json())
@@ -123,6 +132,72 @@ def get_list_of_stops(stops):
         stop_list.append(stop)
     return stop_list[:5]
 
+def get_eta_message(bus_route, stop_id):
+    """Get number of minutes until next bus arrival
+    Returns -1 if no bus available (or if bus doesn't even stop here)
+    
+    Args:
+    stop_id -- GTFS bus ID code (6 digits)
+    bus_route -- bus route (like Q58 or M96) 
+    """
+
+    # MTA buses are either MTA NYCT_Q50 or MTABC_Q50
+    # Let's try them both
+
+    r = requests.get('http://bustime.mta.info/api/siri/stop-monitoring.json', 
+            params = {
+                'key': MTA_API_KEY,
+                'OperatorRef': 'MTA',
+                'MonitoringRef': stop_id,
+                'LineRef': 'MTA NYCT_{}'.format(bus_route)
+            })
+
+    r = r.json()
+
+    # check for errors
+    if 'ErrorCondition' in r['Siri']['ServiceDelivery']['StopMonitoringDelivery'][0]:
+        r = requests.get('http://bustime.mta.info/api/siri/stop-monitoring.json', 
+                params = {
+                    'key': MTA_API_KEY,
+                    'OperatorRef': 'MTA',
+                    'MonitoringRef': stop_id,
+                    'LineRef': 'MTABC_{}'.format(bus_route)
+                })
+
+        r = r.json()
+
+    # still bad route?
+    if 'ErrorCondition' in r['Siri']['ServiceDelivery']['StopMonitoringDelivery'][0]:
+        return "No such route"
+
+
+    arrivals = r['Siri']['ServiceDelivery']['StopMonitoringDelivery'][0]['MonitoredStopVisit']
+
+    if len(arrivals) == 0:
+        return "No known {} arrivals expected.".format(bus_route)
+
+    arrival = arrivals[0]['MonitoredVehicleJourney']['MonitoredCall']
+
+    final_message = ''
+
+    # distance if time is unavailable
+    distance = arrival['Extensions']['Distances']['PresentableDistance']
+
+    if 'ExpectedArrivalTime' in arrival:
+        iso_time = arrival['ExpectedArrivalTime']
+
+        # calculated ETA
+        arrival_time = time.mktime(iso8601.parse_date(iso_time).timetuple())
+        current_time = time.mktime(datetime.datetime.now().timetuple())
+
+        eta = math.floor((arrival_time - current_time) / 60 * 100) / 100
+        final_message += "The {} will arrive in {} minutes. ".format(bus_route, eta)
+
+        final_message += "It is {}.".format(distance)
+    else:
+        final_message += "The {} is {}".format(bus_route, distance)
+
+    return final_message
 
 if __name__ == '__main__':
     app.run(debug=True)
