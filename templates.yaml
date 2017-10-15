@@ -1,0 +1,7 @@
+welcome: Welcome to Bus Time. I am going to ask you for your bus number. Are you ready?
+
+proceed: Great! What's your favorite bus?
+
+round: Can you repeat the numbers {{ numbers|join(", ") }} backwards?
+
+repeat: Okay, how about now?
