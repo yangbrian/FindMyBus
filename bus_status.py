@@ -1,5 +1,6 @@
 import logging
-
+import re
+import json
 from random import randint
 from flask import Flask
 from flask_dynamo import Dynamo
@@ -36,7 +37,7 @@ def welcome():
 
     if 'Item' in response:
         item = response['Item']
-        return statement("Your favorite bus is {}".format(item['bus_route']))
+        return question("Your favorite bus is {}. Would you like to update?".format(item['bus_route']))
     else:
         return question("Welcome! You do not have a bus route and stop setup yet. Would you like to do so now?")
 
@@ -47,6 +48,18 @@ def yes_proceed():
 
     return question(yes_msg)
 
+@ask.intent("PickIntent", convert={'num':'int'})
+def pick_number(num):
+    number = int(num)
+    if session.attributes['nearbyStops']:
+        nearby_stops = json.loads(session.attributes['nearbyStops'])
+        selected_stop = nearby_stops[number]
+        msg = "Your default bus stop is {}".format(selected_stop['audioName'])
+    else:
+        msg = "Please allow Alexa to get your location in order to choose a bus stop"
+
+    return statement(msg)
+
 @ask.intent("NoIntent")
 def no_proceed():
 
@@ -55,19 +68,48 @@ def no_proceed():
 @ask.intent("AnswerIntent", convert={'borough': 'string', 'num': 'int'})
 def answer(borough, num):
 
-    """
+    complete = borough+ str(num)
+
+    groups = re.search(r'([A-z]).*\..*?([0-9]+)$', complete)
+
     dynamo.tables['buses'].put_item(Item={
         'user_id': session.user.userId,
-        'bus_route': "{} {}".format(borough, num)
+        'bus_route': "{} {}".format(groups.group(1), groups.group(2))
     })
-    """
 
-    msg = "Your bus is {} {}. ".format(borough, num)
 
-    # msg = "Your bus is {} {}".format(borough, num)
-    msg += display_stops(find_stops())
+    msg = "<speak>Your bus is {} {}. ".format(borough, num)
+
+    stops = find_stops()
+
+    session.attributes['nearbyStops'] = json.dumps(stops, default=obj_dict)
+
+    msg += display_stops(stops)+'</speak>'
     print(msg)
-    return statement(msg)
+    return question(msg)
+
+def obj_dict(obj):
+    return obj.__dict__
+
+def mapStops(stops):
+    nearby_stops = {}
+    for idx,stop in enumerate(stops):
+        nearby_stops[idx+1] = stop
+    return nearby_stops
+
+        
+def filterStops(stops):
+    response = dynamo.tables['buses'].get_item(Key={'user_id': session.user.userId })
+    filteredStops = []
+    if 'Item' in response:
+        item = response['Item']
+        bus = item['bus_route'].replace(' ','')
+
+        for stop in stops:
+            if bus.upper() in map(str.upper, stop.buses):
+                filteredStops.append(stop)
+
+    return filteredStops
 
 def getLocation():
     deviceId = context.System.device.deviceId
@@ -89,7 +131,7 @@ def find_stops():
 
     geolocator = Nominatim()
     geo_location = geolocator.geocode(geopy_loc)
-    print((geo_location.latitude, geo_location.longitude))
+
 
     return get_nearby_stops(geo_location.latitude, geo_location.longitude)
 
@@ -106,7 +148,7 @@ def get_nearby_stops(latitude, longitude):
 def display_stops(stops):
     stopStr = 'The available stops are '
     for idx,stop in enumerate(stops):
-        stopStr+=str(idx)+' '+stop.audioName+'. \n'
+        stopStr+= "Choose, "+ str(idx+1)+' for <break time="0.5s"/> '+stop.audioName+'. \n'
     
     return stopStr
 
@@ -121,7 +163,7 @@ def get_list_of_stops(stops):
             buses.append(routes['shortName'])
         stop = Stop(name,code,buses)
         stop_list.append(stop)
-    return stop_list[:5]
+    return filterStops(stop_list)[:5]
 
 
 if __name__ == '__main__':

@@ -1,4 +1,5 @@
 import re
+import json
 
 class Stop:
     def __init__(self,name,code, buses):
@@ -6,12 +7,15 @@ class Stop:
         self.audioName = self.convertAudioName(name)
         self.code = code
         self.buses = buses
-
     def __repr__(self):
-        ret = self.name+"\n"
-        for bus in self.buses:
-            ret += "\t--"+bus+"\n"
-        return ret
+        return json.dumps(self)
+
+
+    # def __repr__(self):
+    #     ret = self.name+"\n"
+    #     for bus in self.buses:
+    #         ret += "\t--"+bus+"\n"
+    #     return ret
 
     def convertAudioName(self, name):
         with_space = {
