@@ -27,7 +27,8 @@ class Stop:
             '/' : ' AND ',
             'PL': 'PLACE',
             'PY' : 'PARKWAY',
-            'DR' : 'DRIVE'
+            'DR' : 'DRIVE',
+            'ST' : 'STREET'
             }
         no_space = {
             "/" : " AND "
