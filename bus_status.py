@@ -61,29 +61,33 @@ def yes_proceed():
 
 @ask.intent("PickIntent", convert={'num':'int'})
 def pick_number(num):
-    number = int(num)
-    if session.attributes['nearbyStops']:
-        nearby_stops = json.loads(session.attributes['nearbyStops'])
-        selected_stop = nearby_stops[number-1]
-        msg = "Your default bus stop is {}. ".format(selected_stop['audioName'])
+    try:
+        number = int(num)
+        if session.attributes['nearbyStops']:
+            nearby_stops = json.loads(session.attributes['nearbyStops'])
+            selected_stop = nearby_stops[number-1]
+            msg = "Your default bus stop is {}. ".format(selected_stop['audioName'])
 
-        # Persist info into database
-        dynamo.tables['buses'].put_item(Item={
-            'user_id': session.user.userId,
-            'bus_route': session.attributes['bus_route'],
-            'bus_stop': selected_stop['audioName'],
-            'stop_code': selected_stop['code']
-        })
+            # Persist info into database
+            dynamo.tables['buses'].put_item(Item={
+                'user_id': session.user.userId,
+                'bus_route': session.attributes['bus_route'],
+                'bus_stop': selected_stop['audioName'],
+                'stop_code': selected_stop['code']
+            })
 
-        session.attributes['bus_stop'] = selected_stop['audioName']
-        session.attributes['stop_code'] = selected_stop['code']
+            session.attributes['bus_stop'] = selected_stop['audioName']
+            session.attributes['stop_code'] = selected_stop['code']
 
-        msg += "You have completed the setup. You may now ask Where is the bus upon starting this skill. Try it now!"
+            msg += "You have completed the setup. You may now ask Where is the bus upon starting this skill. Try it now!"
+            return question(msg)
+
+        else:
+            msg = "Please allow Alexa to get your location in order to choose a bus stop"
+            return statement(msg)
+    except:
+        msg = "I didnt understand that, please try again"
         return question(msg)
-
-    else:
-        msg = "Please allow Alexa to get your location in order to choose a bus stop"
-        return statement(msg)
 
 
 @ask.intent("NoIntent")
@@ -93,51 +97,59 @@ def no_proceed():
 
 @ask.intent("BusTimeIntent")
 def bus_time_intent():
+    try:
+        # make sure session objects are ready
+        if 'bus_route' not in session.attributes or 'bus_stop' not in session.attributes or 'stop_code' not in session.attributes:
+            return question('You do not have your preferred route and stop set yet. Would you like to set them now?')
 
-    # check if user already has a saved bus
-    response = dynamo.tables['buses'].get_item(Key={'user_id': session.user.userId })
+        # check if user already has a saved bus
+        response = dynamo.tables['buses'].get_item(Key={'user_id': session.user.userId })
 
-    if 'Item' in response and 'bus_stop' in response['Item']:
-        item = response['Item']
+        if 'Item' in response and 'bus_stop' in response['Item']:
+            item = response['Item']
 
-        session.attributes['bus_route'] = item['bus_route']
-        session.attributes['bus_stop'] = item['bus_stop']
-        session.attributes['stop_code'] = item['stop_code']
+            session.attributes['bus_route'] = item['bus_route']
+            session.attributes['bus_stop'] = item['bus_stop']
+            session.attributes['stop_code'] = item['stop_code']
 
-    # make sure session objects are ready
-    elif 'bus_route' not in session.attributes or 'bus_stop' not in session.attributes or 'stop_code' not in session.attributes:
-        return question('You do not have your preferred route and stop set yet. Would you like to set them now?')
+        # make sure session objects are ready
+        elif 'bus_route' not in session.attributes or 'bus_stop' not in session.attributes or 'stop_code' not in session.attributes:
+            return question('You do not have your preferred route and stop set yet. Would you like to set them now?')
 
-    bus_route = session.attributes['bus_route']
-    bus_stop = session.attributes['bus_stop']
-    stop_code = session.attributes['stop_code']
+        bus_route = session.attributes['bus_route']
+        bus_stop = session.attributes['bus_stop']
+        stop_code = session.attributes['stop_code']
 
-    return statement(get_eta_message(bus_route, stop_code, bus_stop))
+        return statement(get_eta_message(bus_route, stop_code, bus_stop))
+    except:
+        return statement("I didn't understand that. Please try again")
 
 @ask.intent("AnswerIntent", convert={'borough': 'string', 'num': 'int'})
 def answer(borough, num):
+    try:
+        complete = borough+ str(num)
 
-    complete = borough+ str(num)
+        groups = re.search(r'([A-z])\.{0,1}([0-9]+)$', complete.replace(' ',''))
+        session.attributes['bus_route'] = groups.group(1) + ' ' + groups.group(2)
+        print(session.attributes['bus_route'])
 
-    groups = re.search(r'([A-z])\.{0,1}([0-9]+)$', complete.replace(' ',''))
-    session.attributes['bus_route'] = groups.group(1) + ' ' + groups.group(2)
-    print(session.attributes['bus_route'])
+        if session.attributes['bus_route'].upper() == 'M 60':
+            session.attributes['bus_route'] = 'M60-SBS'
 
-    if session.attributes['bus_route'].upper() == 'M 60':
-        session.attributes['bus_route'] = 'M60-SBS'
+        msg = "<speak>Your bus is {} {}. ".format(borough, num)
 
-    msg = "<speak>Your bus is {} {}. ".format(borough, num)
+        stops = find_stops()
 
-    stops = find_stops()
+        if len(stops) == 0:
+            return question('There are no nearby stops for {}. Would you like to try another route?'.format(session.attributes['bus_route']))
 
-    if len(stops) == 0:
-        return question('There are no nearby stops for {}. Would you like to try another route?'.format(session.attributes['bus_route']))
+        session.attributes['nearbyStops'] = json.dumps(stops, default=obj_dict)
 
-    session.attributes['nearbyStops'] = json.dumps(stops, default=obj_dict)
-
-    msg += display_stops(stops)+'</speak>'
-    print(msg)
-    return question(msg)
+        msg += display_stops(stops)+'</speak>'
+        print(msg)
+        return question(msg)
+    except:
+        return question("I didnt understand that. Please try again")
 
 def obj_dict(obj):
     return obj.__dict__
