@@ -53,7 +53,7 @@ def pick_number(num):
     number = int(num)
     if session.attributes['nearbyStops']:
         nearby_stops = json.loads(session.attributes['nearbyStops'])
-        selected_stop = nearby_stops[number]
+        selected_stop = nearby_stops[number-1]
         msg = "Your default bus stop is {}".format(selected_stop['audioName'])
     else:
         msg = "Please allow Alexa to get your location in order to choose a bus stop"
@@ -161,6 +161,7 @@ def get_list_of_stops(stops):
         buses = []
         for routes in stop['routes']:
             buses.append(routes['shortName'])
+            print(routes['shortName'])
         stop = Stop(name,code,buses)
         stop_list.append(stop)
     return filterStops(stop_list)[:5]

@@ -8,7 +8,7 @@ class Stop:
         self.code = code
         self.buses = buses
     def __repr__(self):
-        return json.dumps(self)
+        return json.dumps(self.__dict__)
 
 
     # def __repr__(self):
@@ -25,7 +25,8 @@ class Stop:
             '&' : 'AND',
             '/' : ' AND ',
             'PL': 'PLACE',
-            'PY' : 'PARKWAY'
+            'PY' : 'PARKWAY',
+            'DR' : 'DRIVE'
             }
         no_space = {
             "/" : " AND "
