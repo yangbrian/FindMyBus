@@ -94,8 +94,18 @@ def no_proceed():
 @ask.intent("BusTimeIntent")
 def bus_time_intent():
 
+    # check if user already has a saved bus
+    response = dynamo.tables['buses'].get_item(Key={'user_id': session.user.userId })
+
+    if 'Item' in response and 'bus_stop' in response['Item']:
+        item = response['Item']
+
+        session.attributes['bus_route'] = item['bus_route']
+        session.attributes['bus_stop'] = item['bus_stop']
+        session.attributes['stop_code'] = item['stop_code']
+
     # make sure session objects are ready
-    if 'bus_route' not in session.attributes or 'bus_stop' not in session.attributes or 'stop_code' not in session.attributes:
+    elif 'bus_route' not in session.attributes or 'bus_stop' not in session.attributes or 'stop_code' not in session.attributes:
         return question('You do not have your preferred route and stop set yet. Would you like to set them now?')
 
     bus_route = session.attributes['bus_route']
