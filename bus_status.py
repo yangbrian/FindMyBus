@@ -55,10 +55,12 @@ def no_proceed():
 @ask.intent("AnswerIntent", convert={'borough': 'string', 'num': 'int'})
 def answer(borough, num):
 
+    """
     dynamo.tables['buses'].put_item(Item={
         'user_id': session.user.userId,
         'bus_route': "{} {}".format(borough, num)
     })
+    """
 
     msg = "Your bus is {} {}. ".format(borough, num)
 
