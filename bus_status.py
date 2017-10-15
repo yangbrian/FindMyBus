@@ -79,11 +79,12 @@ def pick_number(num):
         session.attributes['stop_code'] = selected_stop['code']
 
         msg += "You have completed the setup. You may now ask Where is the bus upon starting this skill. Try it now!"
+        return question(msg)
 
     else:
         msg = "Please allow Alexa to get your location in order to choose a bus stop"
+        return statement(msg)
 
-    return statement(msg)
 
 @ask.intent("NoIntent")
 def no_proceed():
