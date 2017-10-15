@@ -41,11 +41,16 @@ def welcome():
     # check if user already has a saved bus
     response = dynamo.tables['buses'].get_item(Key={'user_id': session.user.userId })
 
-    if 'Item' in response:
+    if 'Item' in response and 'bus_stop' in response['Item']:
         item = response['Item']
-        return question("Your favorite bus is {}. Would you like to update?".format(item['bus_route']))
+
+        session.attributes['bus_route'] = item['bus_route']
+        session.attributes['bus_stop'] = item['bus_stop']
+        session.attributes['stop_code'] = item['stop_code']
+
+        return question("Welcome to Find My Bus!")
     else:
-        return question("Welcome! You do not have a bus route and stop setup yet. Would you like to do so now?")
+        return question("Welcome to Find My Bus! You do not have a bus route and stop setup yet. Would you like to do so now?")
 
 @ask.intent("YesIntent")
 def yes_proceed():
@@ -60,7 +65,21 @@ def pick_number(num):
     if session.attributes['nearbyStops']:
         nearby_stops = json.loads(session.attributes['nearbyStops'])
         selected_stop = nearby_stops[number-1]
-        msg = "Your default bus stop is {}".format(selected_stop['audioName'])
+        msg = "Your default bus stop is {}. ".format(selected_stop['audioName'])
+
+        # Persist info into database
+        dynamo.tables['buses'].put_item(Item={
+            'user_id': session.user.userId,
+            'bus_route': session.attributes['bus_route'],
+            'bus_stop': selected_stop['audioName'],
+            'stop_code': selected_stop['code']
+        })
+
+        session.attributes['bus_stop'] = selected_stop['audioName']
+        session.attributes['stop_code'] = selected_stop['code']
+
+        msg += "You have completed the setup. You may now ask Where is the bus upon starting this skill. Try it now!"
+
     else:
         msg = "Please allow Alexa to get your location in order to choose a bus stop"
 
@@ -69,7 +88,20 @@ def pick_number(num):
 @ask.intent("NoIntent")
 def no_proceed():
 
-    return question("Okay how about now?")
+    return statement('Okay. Good day.')
+
+@ask.intent("BusTimeIntent")
+def bus_time_intent():
+
+    # make sure session objects are ready
+    if 'bus_route' not in session.attributes or 'bus_stop' not in session.attributes or 'stop_code' not in session.attributes:
+        return question('You do not have your preferred route and stop set yet. Would you like to set them now?')
+
+    bus_route = session.attributes['bus_route']
+    bus_stop = session.attributes['bus_stop']
+    stop_code = session.attributes['stop_code']
+
+    return statement(get_eta_message(bus_route, stop_code, bus_stop))
 
 @ask.intent("AnswerIntent", convert={'borough': 'string', 'num': 'int'})
 def answer(borough, num):
@@ -77,11 +109,7 @@ def answer(borough, num):
     complete = borough+ str(num)
 
     groups = re.search(r'([A-z]).*\..*?([0-9]+)$', complete)
-
-    dynamo.tables['buses'].put_item(Item={
-        'user_id': session.user.userId,
-        'bus_route': "{} {}".format(groups.group(1), groups.group(2))
-    })
+    session.attributes['bus_route'] = groups.group(1) + ' ' + groups.group(2)
 
     msg = "<speak>Your bus is {} {}. ".format(borough, num)
 
@@ -104,15 +132,12 @@ def mapStops(stops):
 
         
 def filterStops(stops):
-    response = dynamo.tables['buses'].get_item(Key={'user_id': session.user.userId })
     filteredStops = []
-    if 'Item' in response:
-        item = response['Item']
-        bus = item['bus_route'].replace(' ','')
+    bus = session.attributes['bus_route'].replace(' ','')
 
-        for stop in stops:
-            if bus.upper() in map(str.upper, stop.buses):
-                filteredStops.append(stop)
+    for stop in stops:
+        if bus.upper() in map(str.upper, stop.buses):
+            filteredStops.append(stop)
 
     return filteredStops
 
@@ -152,7 +177,7 @@ def get_nearby_stops(latitude, longitude):
 def display_stops(stops):
     stopStr = 'The available stops are '
     for idx,stop in enumerate(stops):
-        stopStr+= "Choose, "+ str(idx+1)+' for <break time="0.5s"/> '+stop.audioName+'. \n'
+        stopStr+= '<break time="0.5s" />Choose, '+ str(idx+1)+' for <break time="0.5s"/> '+stop.audioName+'. \n'
     
     return stopStr
 
@@ -170,14 +195,18 @@ def get_list_of_stops(stops):
         stop_list.append(stop)
     return filterStops(stop_list)[:5]
 
-def get_eta_message(bus_route, stop_id):
+def get_eta_message(bus_route, stop_id, bus_stop):
     """Get number of minutes until next bus arrival
     Returns -1 if no bus available (or if bus doesn't even stop here)
     
     Args:
     stop_id -- GTFS bus ID code (6 digits)
     bus_route -- bus route (like Q58 or M96) 
+    bus_stop -- bus stop name
     """
+
+    # fix bus formatting
+    bus_route = bus_route.upper().replace(' ', '')
 
     # MTA buses are either MTA NYCT_Q50 or MTABC_Q50
     # Let's try them both
@@ -231,9 +260,9 @@ def get_eta_message(bus_route, stop_id):
         eta = math.floor((arrival_time - current_time) / 60 * 100) / 100
         final_message += "The {} will arrive in {} minutes. ".format(bus_route, eta)
 
-        final_message += "It is {}.".format(distance)
+        final_message += "It is {} from {}.".format(distance, bus_stop)
     else:
-        final_message += "The {} is {}".format(bus_route, distance)
+        final_message += "The {} is {} from {}".format(bus_route, distance, bus_stop)
 
     return final_message
 
